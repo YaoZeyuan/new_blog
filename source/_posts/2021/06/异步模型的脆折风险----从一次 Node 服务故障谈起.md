@@ -140,21 +140,21 @@ MySQL 问题排除.
 
 传统 io 模型是串行模式, 一个一个处理请求. 可以看到, 处理 6 个请求时, 总耗时 1200ms. 大量时间浪费在 io 等待中.
 
-![理想异步io处理模型](http://ww1.sinaimg.cn/large/007Yq4pTly1gqtpewqc1xj30i70e3wgl.jpg)
+![理想异步io处理模型](./img/理想异步io处理模型.jpg)
 
 为了避免浪费, 提升服务器吞吐率, 异步 io 模型应运而生. 异步的基本思路是时间复用, 在等待 io 的期间让 CPU 去处理其他请求, 从而充分利用计算资源. 可以看到, 在理想情况下, 异步模型处理 6 个请求只需要 650ms.
 
 不过, 这是理想情况. 在实际应用中, 请求的计算部分和 io 等待部分会交织在一起, 由于每个部分消耗时间都不太长, 因此会形成**时间片**的效果. 只有执行完所有时间片, 一个任务才能执行完成.
 
-![请求模型.jpg](http://ww1.sinaimg.cn/large/007Yq4pTly1gr8gemxpu9j305r0m9gmn.jpg)
+![请求模型.jpg](./img/请求模型.jpg)
 
 而当多个请求同时到达 Node 进程时, Node 的任务队列会变成下边这样: 不同请求的回调在任务队列中进行等待执行.
 
-![Node任务队列.jpg](http://ww1.sinaimg.cn/large/007Yq4pTly1gr8gecrf8ij307s0c8dhi.jpg)
+![Node任务队列.jpg](./img/Node任务队列.jpg)
 
 由于接口响应过程被异步等待被拆分成一个个子任务, 形成了**细碎的时间片**, 接口的异步处理模型如下图所示. 当多个请求同时到达时, 由于 io 等待+任务队列调度的效果, Node 倾向于在请求间平均分配时间片, **对同一接口同时到达的请求倾向于同时完成**. 但可以看出, 即使切换时间片本身需要时间, 导致单个请求响应时长增加, 但因为可以利用 io 等待时间, 异步模型仍然比串行模式要高效.
 
-![实际异步io处理模型](http://ww1.sinaimg.cn/large/007Yq4pTly1gqtpewqceqj30kc0e8acg.jpg)
+![实际异步io处理模型](./img/实际异步io处理模型.jpg)
 
 那如果待执行的任务没有 io 操作, 是**纯计算密集型请求**呢?
 
@@ -162,13 +162,13 @@ MySQL 问题排除.
 
 如下图所示
 
-![计算密集型异步io处理模型](http://ww1.sinaimg.cn/large/007Yq4pTly1gqtpewrg1hj30i70e4di1.jpg)
+![计算密集型异步io处理模型](./img/计算密集型异步io处理模型.jpg)
 
 一般认为, web 服务是典型的 io 密集型场景, 大量时间消耗在 MySQL 通信与和其他接口交互中, 所以 Node 的异步模型天然适合用做 web 服务器. 但在特殊场景下, web 服务也会由 io 密集型退化为计算密集型: **当请求数量超过阈值, 请求提供的 io 等待时长不足以完成其他请求的 CPU 操作时**, 此时 CPU 就会变成服务的性能瓶颈. 由于所有请求都没有足够的 CPU 资源完成运算, 导致所有请求都`无法在可接受时间内响应`, 出现服务进程`"卡死"`的效果.
 
 由于这个过程的临界点是`待处理请求所需的总CPU处理时长`大于`待处理请求所需的总IO时长`, 所以当问题发生时, 会有类似于钢板脆折的效果. 在临界点以下, 一切安好, 响应时长正常, 看不出有什么问题. 一旦超过临界点, 响应时长快速增加, 然后就是大规模 504 报错, 直到请求量降到临界点以下, 处理完所有挤压请求后, 一切又回归正常.
 
-![并发量过大时的异步io处理模型](http://ww1.sinaimg.cn/large/007Yq4pTly1gqtpewpthlj30i70dz76p.jpg)
+![并发量过大时的异步io处理模型](./img/并发量过大时的异步io处理模型.jpg)
 
 所以 Node 服务会有一个很特殊的现象: 绝大多数情况下表现正常, 但当并发量比最大容纳值稍微高一点, **所有接口**响应速度就会快速抬升(脆折), 但请求量只要降一点, 服务性能又会恢复正常. 整个表现非常反直觉, 但符合异步模型的原理.
 
@@ -401,24 +401,24 @@ app.listen(3000);
 2.  文中进行的计算密集型/io 密集型压力测试结果如下
     - 计算密集型
       - 计算密集型-并发 1
-        - ![计算密集型-并发1.png](http://ww1.sinaimg.cn/large/007Yq4pTly1gqv2dv28tpj30it0u0wg1.jpg)
+        - ![计算密集型-并发1.png](./img/实验结果/计算密集型-并发1.png)
       - 计算密集型-并发 10
-        - ![计算密集型-并发10.png](http://ww1.sinaimg.cn/large/007Yq4pTly1gqv2e0is1mj30iz0u0q4j.jpg)
+        - ![计算密集型-并发10.png](./img/实验结果/计算密集型-并发10.png)
       - 计算密集型-并发 100
-        - ![计算密集型-并发100.png](http://ww1.sinaimg.cn/large/007Yq4pTly1gqv2e5rssjj30j00u0mys.jpg)
+        - ![计算密集型-并发100.png](./img/实验结果/计算密集型-并发100.png)
       - 计算密集型-并发 400
-        - ![计算密集型-并发400.png](http://ww1.sinaimg.cn/large/007Yq4pTly1gqv2eahcvhj30j10u0abp.jpg)
+        - ![计算密集型-并发400.png](./img/实验结果/计算密集型-并发400.png)
     - io 密集型
       - io 密集型-并发 1
-        - ![io密集型-并发1.png](http://ww1.sinaimg.cn/large/007Yq4pTly1gqv2d3sme3j30iy0u0q4h.jpg)
+        - ![io密集型-并发1.png](./img/实验结果/io密集型-并发1.png)
       - io 密集型-并发 10
-        - ![io密集型-并发10.png](http://ww1.sinaimg.cn/large/007Yq4pTly1gqv2ddexh7j30ik0u0402.jpg)
+        - ![io密集型-并发10.png](./img/实验结果/io密集型-并发10.png)
       - io 密集型-并发 100
-        - ![io密集型-并发100.png](http://ww1.sinaimg.cn/large/007Yq4pTly1gqv2di0qrrj30io0u0gn6.jpg)
+        - ![io密集型-并发100.png](./img/实验结果/io密集型-并发100.png)
       - io 密集型-并发 400
-        - ![io密集型-并发400.png](http://ww1.sinaimg.cn/large/007Yq4pTly1gqv2dm7r9fj30iq0u0403.jpg)
+        - ![io密集型-并发400.png](./img/实验结果/io密集型-并发400.png)
       - io 密集型-并发 1000
-        - ![io密集型-并发1000.png](http://ww1.sinaimg.cn/large/007Yq4pTly1gqv2dqnllsj30io0u0gn7.jpg)
+        - ![io密集型-并发1000.png](./img/实验结果/io密集型-并发1000.png)
 
 # 参考文章
 
